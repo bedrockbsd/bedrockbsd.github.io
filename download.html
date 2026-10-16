@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<title>BedrockBSD | Downloads</title>
+		<link rel="stylesheet" href="style.css">
+	</head>
+	<body>
+		<h1>Downloading BedrockBSD</h1>
+		<p>First of all, you have to have a working FreeBSD system.<br>Documentation can be found <a href="https://freebsd.org">here</a></p>
+		<p><br><br>Secondly, run this incase you are on amd64:</p>
+		<pre>
+fetch -o /tmp/bootstrapper-amd64.sh \
+	https://bedrockbsd.github.io/bootstrapper-amd64.sh
+
+chmod +x /tmp/bootstrapper-amd64.sh &amp;&amp; /tmp/bootstrapper-amd64.sh
+rm -f /tmp/bootstrapper-amd64.sh</pre>
+
+		<p>That script, "bootstrapper-amd64.sh" ensures you have SSP strata manager in your $PATH.</p>
+
+		<h2>You are done,<br>Enjoy!</h2>
+		<p style="font-size: 13px;">If you wish for further instructions on using SSP, click <a href="docs.html">here.</a></p>
+	</body>
+</html>

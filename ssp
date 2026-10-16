@@ -1,0 +1,100 @@
+#!/bin/sh
+
+if [ "$#" -lt 2 ]; then
+	printf "Must provide a package or strata to build/enter/modify.\nExample Usage:\n$0 --create-strata freebsd\n\n"
+	exit 127
+fi
+
+if [ "$(id -u)" -ne 0 ]; then
+	printf "You must be root to run this script.\n\n"
+	exit 1
+fi
+
+if [ "$1" = "--create-stratum" ]; then
+	if [ "$2" = "freebsd" ]; then
+		export RELEASE="14.4-RELEASE"
+		export ARCH="amd64"
+		export MIRROR="https://download.freebsd.org/releases/${ARCH}/${RELEASE}"
+
+		fetch ${MIRROR}/base.txz -o /tmp/base.txz
+		fetch ${MIRROR}/kernel.txz -o /tmp/kernel.txz
+
+		mkdir -pv /strata/freebsd
+
+		tar -C /strata/freebsd -xpzf /tmp/base.txz
+		tar -C /strata/freebsd -xpzf /tmp/kernel.txz
+	elif [ "$2" = "alpine" ]; then
+		export MIRROR="https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/x86_64"
+    		export TARBALL="alpine-minirootfs-3.24.0-x86_64.tar.gz"
+
+		fetch ${MIRROR}/${TARBALL} -o /tmp/alpine.tar.gz
+		mkdir -pv /strata/alpine
+		tar -C /strata/alpine -xzf /tmp/alpine.tar.gz
+		rm -rf /tmp/alpine.tar.gz
+	elif [ "$2" = "void" ]; then
+		export MIRROR="https://repo-default.voidlinux.org/live/current"
+    		export TARBALL="void-x86_64-musl-ROOTFS-20250202.tar.xz"
+
+		fetch ${MIRROR}/${TARBALL} -o /tmp/void.tar.xz
+
+		mkdir -pv /strata/void
+		tar -C /strata/void -xJf /tmp/void.tar.xz --no-xattrs
+		rm -rf /tmp/void.tar.xz
+	elif [ "$2" = "gentoo" ]; then
+		export MIRROR="https://distfiles.gentoo.org/releases/amd64/autobuilds"
+		fetch -o /tmp/latest-stage3.txt \
+			"${MIRROR}/current-stage3-amd64-openrc/latest-stage3-amd64-openrc.txt"
+
+		export TARBALL=$(grep -E '\.tar\.xz' /tmp/latest-stage3.txt | head -1 | cut -d' ' -f1)
+
+		TARBALL=$(basename "${TARBALL}")
+		echo "stage3: ${TARBALL}"
+
+		fetch -o /tmp/gentoo-stage3.tar.xz \
+			"${MIRROR}/current-stage3-amd64-openrc/${TARBALL}"
+
+		SIZE=$(wc -c < /tmp/gentoo-stage3.tar.xz)
+		if [ "${SIZE}" -lt 1000000 ]; then
+			echo "Download failed (got ${SIZE} bytes)."
+			exit 1
+		fi
+
+		mkdir -pv /strata/gentoo
+		tar -C /strata/gentoo -xJf /tmp/gentoo-stage3.tar.xz --no-xattrs
+		rm -rf /tmp/gentoo-stage3.tar.xz /tmp/latest-stage3.txt
+	fi
+elif [ "$1" = "--enter-stratum" ]; then
+	if [ "$2" = "alpine" ] || [ "$2" = "gentoo" ] || [ "$2" = "void" ]; then
+		cp /etc/resolv.conf "/strata/$2/etc/"
+
+		kldstat -n linux64 || kldload linux64
+
+		mount -t devfs devfs "/strata/$2/dev"
+        	mount -t linprocfs linprocfs "/strata/$2/proc"
+       		mount -t linsysfs linsysfs "/strata/$2/sys"
+
+		mkdir -p "/strata/$2/dev/shm" "/strata/$2/dev/fd"
+		mount -t tmpfs tmpfs "/strata/$2/dev/shm"
+
+		if [ ! -e "/strata/$2/dev/fd/0" ]; then
+			rm -rf "/strata/$2/dev/fd"
+			ln -s /proc/self/fd "/strata/$2/dev/fd"
+		fi
+
+		if [ -e "/strata/$2/bin/bash" ]; then
+			chroot "/strata/$2" /bin/bash
+		else
+			chroot "/strata/$2" /bin/sh
+		fi
+
+		for item in "/strata/$2/sys" "/strata/$2/proc" "/strata/$2/dev/shm" "/strata/$2/dev"; do
+			umount "$item"
+		done
+	else
+		cp /etc/resolv.conf "/strata/$2/etc/"
+
+		mount -t devfs devfs "/strata/$2/dev"
+		chroot "/strata/$2" /bin/sh
+		umount "/strata/$2/dev"
+	fi
+fi
